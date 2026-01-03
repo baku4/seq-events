@@ -134,3 +134,71 @@ impl<R: Read> FastaReader<R> {
         }
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::io::Cursor;
+
+    #[test]
+    fn test_single_record() {
+        let data = b">seq1 description\nACGT\nTGCA\n";
+        let mut reader = FastaReader::new(Cursor::new(&data[..]));
+
+        assert!(matches!(reader.next_event().unwrap().unwrap(), Event::StartRecord));
+        assert!(matches!(reader.next_event().unwrap().unwrap(), Event::IdChunk(id) if id == b"seq1 description"));
+        assert!(matches!(reader.next_event().unwrap().unwrap(), Event::SeqChunk(s) if s == b"ACGT"));
+        assert!(matches!(reader.next_event().unwrap().unwrap(), Event::SeqChunk(s) if s == b"TGCA"));
+        assert!(reader.next_event().is_none());
+    }
+
+    #[test]
+    fn test_multiple_records() {
+        let data = b">seq1\nACGT\n>seq2\nTGCA\n";
+        let mut reader = FastaReader::new(Cursor::new(&data[..]));
+
+        assert!(matches!(reader.next_event().unwrap().unwrap(), Event::StartRecord));
+        assert!(matches!(reader.next_event().unwrap().unwrap(), Event::IdChunk(id) if id == b"seq1"));
+        assert!(matches!(reader.next_event().unwrap().unwrap(), Event::SeqChunk(s) if s == b"ACGT"));
+        assert!(matches!(reader.next_event().unwrap().unwrap(), Event::StartRecord));
+        assert!(matches!(reader.next_event().unwrap().unwrap(), Event::IdChunk(id) if id == b"seq2"));
+        assert!(matches!(reader.next_event().unwrap().unwrap(), Event::SeqChunk(s) if s == b"TGCA"));
+        assert!(reader.next_event().is_none());
+    }
+
+    #[test]
+    fn test_crlf_line_endings() {
+        let data = b">seq1\r\nACGT\r\nTGCA\r\n";
+        let mut reader = FastaReader::new(Cursor::new(&data[..]));
+
+        assert!(matches!(reader.next_event().unwrap().unwrap(), Event::StartRecord));
+        assert!(matches!(reader.next_event().unwrap().unwrap(), Event::IdChunk(id) if id == b"seq1"));
+        assert!(matches!(reader.next_event().unwrap().unwrap(), Event::SeqChunk(s) if s == b"ACGT"));
+        assert!(matches!(reader.next_event().unwrap().unwrap(), Event::SeqChunk(s) if s == b"TGCA"));
+        assert!(reader.next_event().is_none());
+    }
+
+    #[test]
+    fn test_small_buffer() {
+        let data = b">seq1\nACGTACGTACGT\n";
+        let mut reader = FastaReader::with_capacity(4, Cursor::new(&data[..]));
+
+        assert!(matches!(reader.next_event().unwrap().unwrap(), Event::StartRecord));
+
+        let mut id = Vec::new();
+        let mut seq = Vec::new();
+
+        loop {
+            match reader.next_event() {
+                Some(Ok(Event::IdChunk(chunk))) => id.extend_from_slice(chunk),
+                Some(Ok(Event::SeqChunk(chunk))) => seq.extend_from_slice(chunk),
+                Some(Ok(_)) => panic!("Unexpected event"),
+                Some(Err(e)) => panic!("Error: {}", e),
+                None => break,
+            }
+        }
+
+        assert_eq!(&id, b"seq1");
+        assert_eq!(&seq, b"ACGTACGTACGT");
+    }
+}

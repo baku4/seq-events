@@ -201,3 +201,76 @@ impl<R: Read> FastqReader<R> {
         }
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::io::Cursor;
+
+    #[test]
+    fn test_single_record() {
+        let data = b"@read1 description\nACGT\n+\nIIII\n";
+        let mut reader = FastqReader::new(Cursor::new(&data[..]));
+
+        assert!(matches!(reader.next_event().unwrap().unwrap(), Event::StartRecord));
+        assert!(matches!(reader.next_event().unwrap().unwrap(), Event::IdChunk(id) if id == b"read1 description"));
+        assert!(matches!(reader.next_event().unwrap().unwrap(), Event::SeqChunk(s) if s == b"ACGT"));
+        assert!(matches!(reader.next_event().unwrap().unwrap(), Event::QualChunk(q) if q == b"IIII"));
+        assert!(reader.next_event().is_none());
+    }
+
+    #[test]
+    fn test_multiple_records() {
+        let data = b"@read1\nACGT\n+\nIIII\n@read2\nTGCA\n+\nHHHH\n";
+        let mut reader = FastqReader::new(Cursor::new(&data[..]));
+
+        assert!(matches!(reader.next_event().unwrap().unwrap(), Event::StartRecord));
+        assert!(matches!(reader.next_event().unwrap().unwrap(), Event::IdChunk(id) if id == b"read1"));
+        assert!(matches!(reader.next_event().unwrap().unwrap(), Event::SeqChunk(s) if s == b"ACGT"));
+        assert!(matches!(reader.next_event().unwrap().unwrap(), Event::QualChunk(q) if q == b"IIII"));
+        assert!(matches!(reader.next_event().unwrap().unwrap(), Event::StartRecord));
+        assert!(matches!(reader.next_event().unwrap().unwrap(), Event::IdChunk(id) if id == b"read2"));
+        assert!(matches!(reader.next_event().unwrap().unwrap(), Event::SeqChunk(s) if s == b"TGCA"));
+        assert!(matches!(reader.next_event().unwrap().unwrap(), Event::QualChunk(q) if q == b"HHHH"));
+        assert!(reader.next_event().is_none());
+    }
+
+    #[test]
+    fn test_crlf_line_endings() {
+        let data = b"@read1\r\nACGT\r\n+\r\nIIII\r\n";
+        let mut reader = FastqReader::new(Cursor::new(&data[..]));
+
+        assert!(matches!(reader.next_event().unwrap().unwrap(), Event::StartRecord));
+        assert!(matches!(reader.next_event().unwrap().unwrap(), Event::IdChunk(id) if id == b"read1"));
+        assert!(matches!(reader.next_event().unwrap().unwrap(), Event::SeqChunk(s) if s == b"ACGT"));
+        assert!(matches!(reader.next_event().unwrap().unwrap(), Event::QualChunk(q) if q == b"IIII"));
+        assert!(reader.next_event().is_none());
+    }
+
+    #[test]
+    fn test_small_buffer() {
+        let data = b"@read1\nACGTACGT\n+\nIIIIIIII\n";
+        let mut reader = FastqReader::with_capacity(4, Cursor::new(&data[..]));
+
+        assert!(matches!(reader.next_event().unwrap().unwrap(), Event::StartRecord));
+
+        let mut id = Vec::new();
+        let mut seq = Vec::new();
+        let mut qual = Vec::new();
+
+        loop {
+            match reader.next_event() {
+                Some(Ok(Event::IdChunk(chunk))) => id.extend_from_slice(chunk),
+                Some(Ok(Event::SeqChunk(chunk))) => seq.extend_from_slice(chunk),
+                Some(Ok(Event::QualChunk(chunk))) => qual.extend_from_slice(chunk),
+                Some(Ok(_)) => panic!("Unexpected event"),
+                Some(Err(e)) => panic!("Error: {}", e),
+                None => break,
+            }
+        }
+
+        assert_eq!(&id, b"read1");
+        assert_eq!(&seq, b"ACGTACGT");
+        assert_eq!(&qual, b"IIIIIIII");
+    }
+}
