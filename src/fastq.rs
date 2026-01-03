@@ -2,7 +2,7 @@ use std::io::{BufRead, BufReader, Read};
 
 use memchr::{memchr, memchr2, memchr3};
 
-use crate::error::EventSeqReaderError;
+use crate::error::ReaderError;
 use crate::event::Event;
 
 const DEFAULT_BUFFER_SIZE: usize = 128 * 1024;
@@ -16,6 +16,7 @@ enum State {
     Quality,
 }
 
+/// Zero-copy streaming FASTQ parser.
 pub struct FastqReader<R> {
     reader: BufReader<R>,
     pending_consume: usize,
@@ -25,10 +26,12 @@ pub struct FastqReader<R> {
 }
 
 impl<R: Read> FastqReader<R> {
+    /// Creates a reader with default 128 KiB buffer.
     pub fn new(reader: R) -> Self {
         Self::with_capacity(DEFAULT_BUFFER_SIZE, reader)
     }
 
+    /// Creates a reader with specified buffer capacity.
     pub fn with_capacity(capacity: usize, reader: R) -> Self {
         Self {
             reader: BufReader::with_capacity(capacity, reader),
@@ -39,7 +42,8 @@ impl<R: Read> FastqReader<R> {
         }
     }
 
-    pub fn next_event(&mut self) -> Option<Result<Event<'_>, EventSeqReaderError>> {
+    /// Returns the next event, or `None` at EOF.
+    pub fn next_event(&mut self) -> Option<Result<Event<'_>, ReaderError>> {
         loop {
             if self.pending_consume > 0 {
                 self.reader.consume(self.pending_consume);
@@ -68,7 +72,7 @@ impl<R: Read> FastqReader<R> {
                                 self.qual_len = 0;
                                 return Some(Ok(Event::StartRecord));
                             } else {
-                                return Some(Err(EventSeqReaderError::InvalidFormat {
+                                return Some(Err(ReaderError::InvalidFormat {
                                     message: format!(
                                         "Expected '@' at start of FASTQ record, found '{}'",
                                         buf[0] as char

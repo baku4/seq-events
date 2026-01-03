@@ -2,7 +2,7 @@ use std::io::{BufRead, BufReader, Read};
 
 use memchr::{memchr, memchr3};
 
-use crate::error::EventSeqReaderError;
+use crate::error::ReaderError;
 use crate::event::Event;
 
 const DEFAULT_BUFFER_SIZE: usize = 128 * 1024;
@@ -14,6 +14,7 @@ enum State {
     Sequence,
 }
 
+/// Zero-copy streaming FASTA parser.
 pub struct FastaReader<R> {
     reader: BufReader<R>,
     pending_consume: usize,
@@ -21,10 +22,12 @@ pub struct FastaReader<R> {
 }
 
 impl<R: Read> FastaReader<R> {
+    /// Creates a reader with default 128 KiB buffer.
     pub fn new(reader: R) -> Self {
         Self::with_capacity(DEFAULT_BUFFER_SIZE, reader)
     }
 
+    /// Creates a reader with specified buffer capacity.
     pub fn with_capacity(capacity: usize, reader: R) -> Self {
         Self {
             reader: BufReader::with_capacity(capacity, reader),
@@ -33,7 +36,8 @@ impl<R: Read> FastaReader<R> {
         }
     }
 
-    pub fn next_event(&mut self) -> Option<Result<Event<'_>, EventSeqReaderError>> {
+    /// Returns the next event, or `None` at EOF.
+    pub fn next_event(&mut self) -> Option<Result<Event<'_>, ReaderError>> {
         loop {
             if self.pending_consume > 0 {
                 self.reader.consume(self.pending_consume);
@@ -60,7 +64,7 @@ impl<R: Read> FastaReader<R> {
                                 self.pending_consume = 1;
                                 return Some(Ok(Event::StartRecord));
                             } else {
-                                return Some(Err(EventSeqReaderError::InvalidFormat {
+                                return Some(Err(ReaderError::InvalidFormat {
                                     message: format!(
                                         "Expected '>' at start of FASTA record, found '{}'",
                                         buf[0] as char
