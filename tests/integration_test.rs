@@ -19,18 +19,26 @@ fn count_fasta_stats<R: std::io::Read>(mut reader: FastaReader<R>) -> (usize, us
     let mut total_seq_len = 0;
     let mut record_ids = Vec::new();
     let mut current_id = Vec::new();
+    let mut in_record = false;
 
     while let Some(event) = reader.next_event() {
         match event.expect("Failed to parse FASTA") {
-            Event::StartRecord => {
+            Event::NextRecord => {
+                if !current_id.is_empty() {
+                    record_ids.push(String::from_utf8_lossy(&current_id).to_string());
+                    current_id.clear();
+                }
                 record_count += 1;
-                current_id.clear();
             }
             Event::IdChunk(chunk) => {
+                if !in_record {
+                    in_record = true;
+                    record_count += 1;
+                }
                 current_id.extend_from_slice(chunk);
             }
             Event::SeqChunk(bases) => {
-                if record_ids.len() < record_count {
+                if !current_id.is_empty() {
                     record_ids.push(String::from_utf8_lossy(&current_id).to_string());
                     current_id.clear();
                 }
@@ -40,7 +48,7 @@ fn count_fasta_stats<R: std::io::Read>(mut reader: FastaReader<R>) -> (usize, us
         }
     }
 
-    if record_ids.len() < record_count {
+    if !current_id.is_empty() {
         record_ids.push(String::from_utf8_lossy(&current_id).to_string());
     }
 
@@ -55,18 +63,26 @@ fn count_fastq_stats<R: std::io::Read>(
     let mut total_qual_len = 0;
     let mut record_ids = Vec::new();
     let mut current_id = Vec::new();
+    let mut in_record = false;
 
     while let Some(event) = reader.next_event() {
         match event.expect("Failed to parse FASTQ") {
-            Event::StartRecord => {
+            Event::NextRecord => {
+                if !current_id.is_empty() {
+                    record_ids.push(String::from_utf8_lossy(&current_id).to_string());
+                    current_id.clear();
+                }
                 record_count += 1;
-                current_id.clear();
             }
             Event::IdChunk(chunk) => {
+                if !in_record {
+                    in_record = true;
+                    record_count += 1;
+                }
                 current_id.extend_from_slice(chunk);
             }
             Event::SeqChunk(bases) => {
-                if record_ids.len() < record_count {
+                if !current_id.is_empty() {
                     record_ids.push(String::from_utf8_lossy(&current_id).to_string());
                     current_id.clear();
                 }
@@ -78,7 +94,7 @@ fn count_fastq_stats<R: std::io::Read>(
         }
     }
 
-    if record_ids.len() < record_count {
+    if !current_id.is_empty() {
         record_ids.push(String::from_utf8_lossy(&current_id).to_string());
     }
 

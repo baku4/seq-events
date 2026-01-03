@@ -23,6 +23,7 @@ pub struct FastqReader<R> {
     state: State,
     seq_len: usize,
     qual_len: usize,
+    first_record: bool,
 }
 
 impl<R: Read> FastqReader<R> {
@@ -39,6 +40,7 @@ impl<R: Read> FastqReader<R> {
             state: State::Start,
             seq_len: 0,
             qual_len: 0,
+            first_record: true,
         }
     }
 
@@ -66,11 +68,16 @@ impl<R: Read> FastqReader<R> {
                     match first_non_ws {
                         Some(0) => {
                             if buf[0] == b'@' {
+                                let is_first = self.first_record;
+                                self.first_record = false;
                                 self.state = State::Id;
                                 self.pending_consume = 1;
                                 self.seq_len = 0;
                                 self.qual_len = 0;
-                                return Some(Ok(Event::StartRecord));
+                                if is_first {
+                                    continue; // First record - no event
+                                }
+                                return Some(Ok(Event::NextRecord));
                             } else {
                                 return Some(Err(ReaderError::InvalidFormat {
                                     message: format!(
@@ -216,7 +223,6 @@ mod tests {
         let data = b"@read1 description\nACGT\n+\nIIII\n";
         let mut reader = FastqReader::new(Cursor::new(&data[..]));
 
-        assert!(matches!(reader.next_event().unwrap().unwrap(), Event::StartRecord));
         assert!(matches!(reader.next_event().unwrap().unwrap(), Event::IdChunk(id) if id == b"read1 description"));
         assert!(matches!(reader.next_event().unwrap().unwrap(), Event::SeqChunk(s) if s == b"ACGT"));
         assert!(matches!(reader.next_event().unwrap().unwrap(), Event::QualChunk(q) if q == b"IIII"));
@@ -228,11 +234,10 @@ mod tests {
         let data = b"@read1\nACGT\n+\nIIII\n@read2\nTGCA\n+\nHHHH\n";
         let mut reader = FastqReader::new(Cursor::new(&data[..]));
 
-        assert!(matches!(reader.next_event().unwrap().unwrap(), Event::StartRecord));
         assert!(matches!(reader.next_event().unwrap().unwrap(), Event::IdChunk(id) if id == b"read1"));
         assert!(matches!(reader.next_event().unwrap().unwrap(), Event::SeqChunk(s) if s == b"ACGT"));
         assert!(matches!(reader.next_event().unwrap().unwrap(), Event::QualChunk(q) if q == b"IIII"));
-        assert!(matches!(reader.next_event().unwrap().unwrap(), Event::StartRecord));
+        assert!(matches!(reader.next_event().unwrap().unwrap(), Event::NextRecord));
         assert!(matches!(reader.next_event().unwrap().unwrap(), Event::IdChunk(id) if id == b"read2"));
         assert!(matches!(reader.next_event().unwrap().unwrap(), Event::SeqChunk(s) if s == b"TGCA"));
         assert!(matches!(reader.next_event().unwrap().unwrap(), Event::QualChunk(q) if q == b"HHHH"));
@@ -244,7 +249,6 @@ mod tests {
         let data = b"@read1\r\nACGT\r\n+\r\nIIII\r\n";
         let mut reader = FastqReader::new(Cursor::new(&data[..]));
 
-        assert!(matches!(reader.next_event().unwrap().unwrap(), Event::StartRecord));
         assert!(matches!(reader.next_event().unwrap().unwrap(), Event::IdChunk(id) if id == b"read1"));
         assert!(matches!(reader.next_event().unwrap().unwrap(), Event::SeqChunk(s) if s == b"ACGT"));
         assert!(matches!(reader.next_event().unwrap().unwrap(), Event::QualChunk(q) if q == b"IIII"));
@@ -255,8 +259,6 @@ mod tests {
     fn test_small_buffer() {
         let data = b"@read1\nACGTACGT\n+\nIIIIIIII\n";
         let mut reader = FastqReader::with_capacity(4, Cursor::new(&data[..]));
-
-        assert!(matches!(reader.next_event().unwrap().unwrap(), Event::StartRecord));
 
         let mut id = Vec::new();
         let mut seq = Vec::new();

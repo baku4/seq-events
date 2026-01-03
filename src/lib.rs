@@ -7,7 +7,7 @@
 //! let mut reader = FastaReader::new(File::open("seq.fasta").unwrap());
 //! while let Some(Ok(event)) = reader.next_event() {
 //!     match event {
-//!         Event::StartRecord => {}
+//!         Event::NextRecord => {}  // Between records (not before first)
 //!         Event::IdChunk(id) => {}
 //!         Event::SeqChunk(seq) => {}
 //!         Event::QualChunk(_) => unreachable!(),
