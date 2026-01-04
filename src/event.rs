@@ -8,6 +8,6 @@ pub enum Event<'a> {
     IdChunk(&'a [u8]),
     /// Sequence data chunk.
     SeqChunk(&'a [u8]),
-    /// Quality scores chunk (FASTQ only).
+    /// Phred quality scores chunk, ASCII-encoded (FASTQ only).
     QualChunk(&'a [u8]),
 }
