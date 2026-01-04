@@ -1,19 +1,4 @@
-//! Zero-copy streaming FASTA/FASTQ parser.
-//!
-//! ```no_run
-//! use seq_events::{FastaReader, Event};
-//! use std::fs::File;
-//!
-//! let mut reader = FastaReader::new(File::open("seq.fasta").unwrap());
-//! while let Some(Ok(event)) = reader.next_event() {
-//!     match event {
-//!         Event::NextRecord => {}  // Between records (not before first)
-//!         Event::IdChunk(id) => {}
-//!         Event::SeqChunk(seq) => {}
-//!         Event::QualChunk(_) => unreachable!(),
-//!     }
-//! }
-//! ```
+#![doc = include_str!("../README.md")]
 
 mod error;
 mod event;
