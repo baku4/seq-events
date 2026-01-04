@@ -2,6 +2,12 @@
 name = "seq-events"
 version = "0.1.0"
 edition = "2024"
+license = "Apache-2.0"
+description = "A minimal, zero-copy streaming parser for FASTA/FASTQ files"
+repository = "https://github.com/kbahk/seq-events"
+keywords = ["fasta", "fastq", "bioinformatics", "parser", "streaming"]
+categories = ["parser-implementations", "science::bioinformatics"]
+readme = "README.md"
 
 [dependencies]
 memchr = "2"
